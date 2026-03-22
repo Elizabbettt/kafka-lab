@@ -1,0 +1,69 @@
+import json
+import random
+import uuid
+from datetime import datetime, timedelta
+
+class HomeworkGenerator:
+    """Генерирует случайные данные о домашних заданиях"""
+
+    STUDENTS = [
+        "Иванов Иван", "Петрова Мария", "Сидоров Алексей",
+        "Кузнецова Анна", "Смирнов Дмитрий", "Васильева Елена",
+        "Попов Андрей", "Соколова Татьяна", "Михайлов Сергей",
+        "Федорова Ольга"
+    ]
+
+    TEACHERS = [
+        "Петрова Мария Ивановна", "Сидоров Алексей Петрович",
+        "Кузнецова Анна Владимировна", "Смирнов Дмитрий Игоревич"
+    ]
+
+    SUBJECTS = ["Математика", "Русский язык", "Физика", "Информатика", "История", "Английский язык"]
+
+    HOMEWORKS = {
+        "Математика": ["§15, №123-135", "§16, №140-150", "Повторить формулы", "Задача на движение"],
+        "Русский язык": ["Упр. 45, стр. 78", "Написать сочинение", "Выучить правила", "Разбор предложений"],
+        "Физика": ["§12, задачи 1-5", "Лабораторная работа", "Подготовить доклад", "Решить задачи на силу"],
+        "Информатика": ["Создать презентацию", "Написать программу", "§8, вопросы", "Работа в Excel"],
+        "История": ["§10, ответить на вопросы", "Таблица событий", "Подготовить сообщение", "Контурная карта"],
+        "Английский язык": ["Упр. 30-35", "Выучить слова", "Перевести текст", "Диалог"]
+    }
+
+    @staticmethod
+    def generate_homework():
+        """Генерирует случайное сообщение о домашнем задании"""
+        student = random.choice(HomeworkGenerator.STUDENTS)
+        teacher = random.choice(HomeworkGenerator.TEACHERS)
+        subject = random.choice(HomeworkGenerator.SUBJECTS)
+        homework = random.choice(HomeworkGenerator.HOMEWORKS[subject])
+
+        # Дата выдачи (от 1 до 7 дней назад)
+        date_assigned = (datetime.now() - timedelta(days=random.randint(1, 7))).strftime("%Y-%m-%d")
+
+        # Дата сдачи (от -2 до +3 дней от даты выдачи)
+        days_offset = random.randint(-2, 3)
+        date_submitted_obj = datetime.strptime(date_assigned, "%Y-%m-%d") + timedelta(days=days_offset)
+        date_submitted = date_submitted_obj.strftime("%Y-%m-%d")
+
+        # Оценка: 20% невалидных (отрицательные или >5)
+        if random.random() < 0.2:
+            grade = random.choice([-1, -2, 6, 7, 10])  # невалидные оценки
+        else:
+            grade = random.randint(2, 5)
+
+        # Комментарий (короткий)
+        comments = ["Отлично!", "Хорошо", "Есть ошибки", "Переделать", "Молодец", "Старайся лучше"]
+        comment = random.choice(comments)
+
+        return {
+            "student": student,
+            "teacher": teacher,
+            "subject": subject,
+            "homework": homework,
+            "date_assigned": date_assigned,
+            "date_submitted": date_submitted,
+            "grade": grade,
+            "comment": comment,
+            "message_id": str(uuid.uuid4()),
+            "timestamp": datetime.now().isoformat()
+        }

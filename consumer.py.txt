@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+import json
+import logging
+from typing import Dict, Any
+from kafka import KafkaConsumer
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+KAFKA_BOOTSTRAP_SERVERS = ['localhost:9092']
+TOPIC_NAME = 'homework-control'
+GROUP_ID = 'homework-consumer-group'
+
+class HomeworkValidator:
+    """Валидация сообщений о домашних заданиях"""
+
+    REQUIRED_FIELDS = [
+        'student', 'teacher', 'subject', 'homework',
+        'date_assigned', 'date_submitted', 'grade', 'message_id', 'timestamp'
+    ]
+
+    VALID_SUBJECTS = {"Математика", "Русский язык", "Физика", "Информатика", "История", "Английский язык"}
+
+    @classmethod
+    def validate(cls, message: Dict[str, Any]) -> tuple[bool, list[str]]:
+        errors = []
+
+        # Проверка наличия всех полей
+        for field in cls.REQUIRED_FIELDS:
+            if field not in message:
+                errors.append(f"Отсутствует поле: {field}")
+            elif not message[field] and message[field] != 0:
+                errors.append(f"Пустое поле: {field}")
+
+        # Проверка предмета
+        if message.get('subject') not in cls.VALID_SUBJECTS:
+            errors.append(f"Неизвестный предмет: {message.get('subject')}")
+
+        # Проверка оценки (должна быть от 2 до 5)
+        grade = message.get('grade')
+        if grade is not None:
+            if not isinstance(grade, (int, float)):
+                errors.append(f"Оценка должна быть числом: {grade}")
+            elif grade < 2 or grade > 5:
+                errors.append(f"Оценка вне допустимого диапазона (2-5): {grade}")
+
+        # Проверка дат (формат YYYY-MM-DD)
+        for date_field in ['date_assigned', 'date_submitted']:
+            date_val = message.get(date_field)
+            if date_val:
+                if len(date_val) != 10 or date_val[4] != '-' or date_val[7] != '-':
+                    errors.append(f"Неверный формат даты в поле {date_field}: {date_val}")
+
+        return len(errors) == 0, errors
+
+
+class HomeworkConsumer:
+    def __init__(self, bootstrap_servers, topic, group_id):
+        self.topic = topic
+        self.group_id = group_id
+        self.consumer = None
+
+    def connect(self):
+        try:
+            self.consumer = KafkaConsumer(
+                self.topic,
+                bootstrap_servers=self.bootstrap_servers,
+                group_id=self.group_id,
+                value_deserializer=lambda v: json.loads(v.decode('utf-8')),
+                auto_offset_reset='earliest',
+                enable_auto_commit=True
+            )
+            logger.info(f"Connected to Kafka, topic: {self.topic}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to connect: {e}")
+            return False
+
+    def process_messages(self):
+        if not self.consumer:
+            return
+
+        logger.info("Waiting for messages...")
+        valid_count = 0
+        invalid_count = 0
+
+        try:
+            for message in self.consumer:
+                homework_data = message.value
+                print(f"\n📥 RECEIVED (Offset: {message.offset})")
+
+                is_valid, errors = HomeworkValidator.validate(homework_data)
+
+                if is_valid:
+                    valid_count += 1
+                    print(f"✓ VALID MESSAGE:")
+                    print(json.dumps(homework_data, indent=2, ensure_ascii=False))
+                else:
+                    invalid_count += 1
+                    print(f"✗ NOT VALID")
+                    for error in errors:
+                        print(f"  - {error}")
+                    print(f"Message: {json.dumps(homework_data, ensure_ascii=False)}")
+
+                print(f"Stats - Total: {valid_count + invalid_count}, Valid: {valid_count}, Invalid: {invalid_count}")
+
+        except KeyboardInterrupt:
+            logger.info("Consumer stopped")
+        finally:
+            self.close()
+
+    def close(self):
+        if self.consumer:
+            self.consumer.close()
+
+def main():
+    consumer = HomeworkConsumer(KAFKA_BOOTSTRAP_SERVERS, TOPIC_NAME, GROUP_ID)
+    if not consumer.connect():
+        return
+    consumer.process_messages()
+
+if __name__ == "__main__":
+    main()
